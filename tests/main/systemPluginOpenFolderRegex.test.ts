@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
 import path from 'path'
 
+interface PluginFeatureCommand {
+  type?: string
+  match?: string
+}
+
+interface PluginFeature {
+  code: string
+  cmds: Array<string | PluginFeatureCommand>
+}
+
+interface PluginConfig {
+  features: PluginFeature[]
+}
+
 function getOpenFolderRegex(): RegExp {
   const pluginJsonPath = path.join(
     process.cwd(),
@@ -10,9 +24,11 @@ function getOpenFolderRegex(): RegExp {
     'public',
     'plugin.json'
   )
-  const pluginConfig = JSON.parse(readFileSync(pluginJsonPath, 'utf-8'))
-  const feature = pluginConfig.features.find((item: any) => item.code === 'open-folder')
-  const regexCmd = feature?.cmds?.find((item: any) => item.type === 'regex')
+  const pluginConfig = JSON.parse(readFileSync(pluginJsonPath, 'utf-8')) as PluginConfig
+  const feature = pluginConfig.features.find((item) => item.code === 'open-folder')
+  const regexCmd = feature?.cmds?.find(
+    (item): item is PluginFeatureCommand => typeof item !== 'string' && item.type === 'regex'
+  )
   const regexString = regexCmd?.match
   const match = typeof regexString === 'string' ? regexString.match(/^\/(.+)\/([gimuy]*)$/) : null
 
@@ -40,6 +56,16 @@ describe('system plugin open-folder regex', () => {
     expect(regex.test('C:/Users/Test/Desktop')).toBe(false)
     expect(regex.test('\\\\server\\share\\folder')).toBe(false)
     expect(regex.test('%USERPROFILE%\\Desktop')).toBe(false)
+  })
+
+  it('does not match Windows paths that contain invalid path characters', () => {
+    expect(regex.test('C:\\Users\\bad*name')).toBe(false)
+    expect(regex.test('C:\\Users\\bad?name')).toBe(false)
+    expect(regex.test('C:\\Users\\bad"name')).toBe(false)
+    expect(regex.test('C:\\Users\\bad<name')).toBe(false)
+    expect(regex.test('C:\\Users\\bad>name')).toBe(false)
+    expect(regex.test('C:\\Users\\bad|name')).toBe(false)
+    expect(regex.test('C:\\Users\\bad:name')).toBe(false)
   })
 
   it('does not match urls', () => {
